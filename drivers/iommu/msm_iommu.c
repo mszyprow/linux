@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
+#include <linux/dma-iommu.h>
 #include <linux/errno.h>
 #include <linux/io.h>
 #include <linux/io-pgtable.h>
@@ -314,11 +315,14 @@ static struct iommu_domain *msm_iommu_domain_alloc(unsigned type)
 {
 	struct msm_priv *priv;
 
-	if (type != IOMMU_DOMAIN_UNMANAGED)
+	if (type != IOMMU_DOMAIN_UNMANAGED && type != IOMMU_DOMAIN_DMA)
 		return NULL;
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
+		goto fail_nomem;
+
+	if (type == IOMMU_DOMAIN_DMA && iommu_get_dma_cookie(&priv->domain))
 		goto fail_nomem;
 
 	INIT_LIST_HEAD(&priv->list_attached);
@@ -339,6 +343,7 @@ static void msm_iommu_domain_free(struct iommu_domain *domain)
 	struct msm_priv *priv;
 	unsigned long flags;
 
+	iommu_put_dma_cookie(domain);
 	spin_lock_irqsave(&msm_iommu_lock, flags);
 	priv = to_msm_priv(domain);
 	kfree(priv);
