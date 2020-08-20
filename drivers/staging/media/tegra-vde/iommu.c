@@ -10,10 +10,6 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 
-#if IS_ENABLED(CONFIG_ARM_DMA_USE_IOMMU)
-#include <asm/dma-iommu.h>
-#endif
-
 #include "vde.h"
 
 int tegra_vde_iommu_map(struct tegra_vde *vde,
@@ -70,14 +66,6 @@ int tegra_vde_iommu_init(struct tegra_vde *vde)
 	if (!vde->group)
 		return 0;
 
-#if IS_ENABLED(CONFIG_ARM_DMA_USE_IOMMU)
-	if (dev->archdata.mapping) {
-		struct dma_iommu_mapping *mapping = to_dma_iommu_mapping(dev);
-
-		arm_iommu_detach_device(dev);
-		arm_iommu_release_mapping(mapping);
-	}
-#endif
 	vde->domain = iommu_domain_alloc(&platform_bus_type);
 	if (!vde->domain) {
 		err = -ENOMEM;
