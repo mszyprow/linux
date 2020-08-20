@@ -30,7 +30,6 @@
 #include <linux/scatterlist.h>
 
 #include <asm/cacheflush.h>
-#include <asm/dma-iommu.h>
 
 #undef STATS
 

@@ -33,7 +33,6 @@
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 #include <asm/mach/arch.h>
-#include <asm/dma-iommu.h>
 #include <asm/mach/map.h>
 #include <asm/system_info.h>
 #include <asm/dma-contiguous.h>
@@ -1073,201 +1072,6 @@ static const struct dma_map_ops *arm_get_dma_map_ops(bool coherent)
 	return coherent ? &arm_coherent_dma_ops : &arm_dma_ops;
 }
 
-#ifdef CONFIG_ARM_DMA_USE_IOMMU
-
-extern const struct dma_map_ops iommu_dma_ops;
-extern int iommu_dma_init_domain(struct iommu_domain *domain, dma_addr_t base,
-		u64 size, struct device *dev);
-/**
- * arm_iommu_create_mapping
- * @bus: pointer to the bus holding the client device (for IOMMU calls)
- * @base: start address of the valid IO address space
- * @size: maximum size of the valid IO address space
- *
- * Creates a mapping structure which holds information about used/unused
- * IO address ranges, which is required to perform memory allocation and
- * mapping with IOMMU aware functions.
- *
- * The client device need to be attached to the mapping with
- * arm_iommu_attach_device function.
- */
-struct dma_iommu_mapping *
-arm_iommu_create_mapping(struct bus_type *bus, dma_addr_t base, u64 size)
-{
-	struct dma_iommu_mapping *mapping;
-	int err = -ENOMEM;
-
-	mapping = kzalloc(sizeof(*mapping), GFP_KERNEL);
-	if (!mapping)
-		goto err;
-
-	mapping->domain = iommu_domain_alloc(bus);
-	if (!mapping->domain)
-		goto err2;
-
-	err = iommu_get_dma_cookie(mapping->domain);
-	if (err)
-		goto err3;
-
-	err = iommu_dma_init_domain(mapping->domain, base, size, NULL);
-	if (err)
-		goto err4;
-
-	kref_init(&mapping->kref);
-	return mapping;
-err4:
-	iommu_put_dma_cookie(mapping->domain);
-err3:
-	iommu_domain_free(mapping->domain);
-err2:
-	kfree(mapping);
-err:
-	return ERR_PTR(err);
-}
-EXPORT_SYMBOL_GPL(arm_iommu_create_mapping);
-
-static void release_iommu_mapping(struct kref *kref)
-{
-	struct dma_iommu_mapping *mapping =
-		container_of(kref, struct dma_iommu_mapping, kref);
-
-	iommu_put_dma_cookie(mapping->domain);
-	iommu_domain_free(mapping->domain);
-	kfree(mapping);
-}
-
-void arm_iommu_release_mapping(struct dma_iommu_mapping *mapping)
-{
-	if (mapping)
-		kref_put(&mapping->kref, release_iommu_mapping);
-}
-EXPORT_SYMBOL_GPL(arm_iommu_release_mapping);
-
-static int __arm_iommu_attach_device(struct device *dev,
-				     struct dma_iommu_mapping *mapping)
-{
-	int err;
-
-	err = iommu_attach_device(mapping->domain, dev);
-	if (err)
-		return err;
-
-	kref_get(&mapping->kref);
-	to_dma_iommu_mapping(dev) = mapping;
-
-	pr_debug("Attached IOMMU controller to %s device.\n", dev_name(dev));
-	return 0;
-}
-
-/**
- * arm_iommu_attach_device
- * @dev: valid struct device pointer
- * @mapping: io address space mapping structure (returned from
- *	arm_iommu_create_mapping)
- *
- * Attaches specified io address space mapping to the provided device.
- * This replaces the dma operations (dma_map_ops pointer) with the
- * IOMMU aware version.
- *
- * More than one client might be attached to the same io address space
- * mapping.
- */
-int arm_iommu_attach_device(struct device *dev,
-			    struct dma_iommu_mapping *mapping)
-{
-	int err;
-
-	err = __arm_iommu_attach_device(dev, mapping);
-	if (err)
-		return err;
-
-	set_dma_ops(dev, &iommu_dma_ops);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(arm_iommu_attach_device);
-
-/**
- * arm_iommu_detach_device
- * @dev: valid struct device pointer
- *
- * Detaches the provided device from a previously attached map.
- * This overwrites the dma_ops pointer with appropriate non-IOMMU ops.
- */
-void arm_iommu_detach_device(struct device *dev)
-{
-	struct dma_iommu_mapping *mapping;
-
-	mapping = to_dma_iommu_mapping(dev);
-	if (!mapping) {
-		dev_warn(dev, "Not attached\n");
-		return;
-	}
-
-	iommu_detach_device(mapping->domain, dev);
-	kref_put(&mapping->kref, release_iommu_mapping);
-	to_dma_iommu_mapping(dev) = NULL;
-	set_dma_ops(dev, arm_get_dma_map_ops(dev->archdata.dma_coherent));
-
-	pr_debug("Detached IOMMU controller from %s device.\n", dev_name(dev));
-}
-EXPORT_SYMBOL_GPL(arm_iommu_detach_device);
-
-static bool arm_setup_iommu_dma_ops(struct device *dev, u64 dma_base, u64 size,
-				    const struct iommu_ops *iommu)
-{
-	struct dma_iommu_mapping *mapping;
-
-	if (!iommu)
-		return false;
-
-	/* If a default domain exists, just let iommu-dma work normally */
-	if (iommu_get_domain_for_dev(dev)) {
-		iommu_setup_dma_ops(dev, dma_base, size);
-		return true;
-	}
-
-	/* Otherwise, use the workaround until the IOMMU driver is updated */
-	mapping = arm_iommu_create_mapping(dev->bus, dma_base, size);
-	if (IS_ERR(mapping)) {
-		pr_warn("Failed to create %llu-byte IOMMU mapping for device %s\n",
-				size, dev_name(dev));
-		return false;
-	}
-
-	if (__arm_iommu_attach_device(dev, mapping)) {
-		pr_warn("Failed to attached device %s to IOMMU_mapping\n",
-				dev_name(dev));
-		arm_iommu_release_mapping(mapping);
-		return false;
-	}
-
-	set_dma_ops(dev, &iommu_dma_ops);
-	return true;
-}
-
-static void arm_teardown_iommu_dma_ops(struct device *dev)
-{
-	struct dma_iommu_mapping *mapping = to_dma_iommu_mapping(dev);
-
-	if (!mapping)
-		return;
-
-	arm_iommu_detach_device(dev);
-	arm_iommu_release_mapping(mapping);
-}
-
-#else
-
-static bool arm_setup_iommu_dma_ops(struct device *dev, u64 dma_base, u64 size,
-				    const struct iommu_ops *iommu)
-{
-	return false;
-}
-
-static void arm_teardown_iommu_dma_ops(struct device *dev) { }
-
-#endif	/* CONFIG_ARM_DMA_USE_IOMMU */
-
 void arch_setup_dma_ops(struct device *dev, u64 dma_base, u64 size,
 			const struct iommu_ops *iommu, bool coherent)
 {
@@ -1286,7 +1090,8 @@ void arch_setup_dma_ops(struct device *dev, u64 dma_base, u64 size,
 
 	set_dma_ops(dev, arm_get_dma_map_ops(coherent));
 
-	arm_setup_iommu_dma_ops(dev, dma_base, size, iommu);
+	if (iommu)
+		iommu_setup_dma_ops(dev, dma_base, size);
 
 #ifdef CONFIG_XEN
 	if (xen_initial_domain())
@@ -1300,7 +1105,6 @@ void arch_teardown_dma_ops(struct device *dev)
 	if (!dev->archdata.dma_ops_setup)
 		return;
 
-	arm_teardown_iommu_dma_ops(dev);
 	/* Let arch_setup_dma_ops() start again from scratch upon re-probe */
 	set_dma_ops(dev, NULL);
 }
