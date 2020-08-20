@@ -9,6 +9,7 @@
 
 #define dev_fmt(fmt)	"gart: " fmt
 
+#include <linux/dma-iommu.h>
 #include <linux/io.h>
 #include <linux/iommu.h>
 #include <linux/moduleparam.h>
@@ -145,15 +146,21 @@ static struct iommu_domain *gart_iommu_domain_alloc(unsigned type)
 {
 	struct iommu_domain *domain;
 
-	if (type != IOMMU_DOMAIN_UNMANAGED)
+	if (type != IOMMU_DOMAIN_UNMANAGED && type != IOMMU_DOMAIN_DMA)
 		return NULL;
 
 	domain = kzalloc(sizeof(*domain), GFP_KERNEL);
-	if (domain) {
-		domain->geometry.aperture_start = gart_handle->iovmm_base;
-		domain->geometry.aperture_end = gart_handle->iovmm_end - 1;
-		domain->geometry.force_aperture = true;
+	if (!domain)
+		return NULL;
+
+	if (type == IOMMU_DOMAIN_DMA && iommu_get_dma_cookie(domain)) {
+		kfree(domain);
+		return NULL;
 	}
+
+	domain->geometry.aperture_start = gart_handle->iovmm_base;
+	domain->geometry.aperture_end = gart_handle->iovmm_end - 1;
+	domain->geometry.force_aperture = true;
 
 	return domain;
 }
