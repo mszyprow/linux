@@ -145,7 +145,6 @@ struct isp_xclk {
  * @syscon: Regmap for the syscon register space
  * @syscon_offset: Offset of the CSIPHY control register in syscon
  * @phy_type: ISP_PHY_TYPE_{3430,3630}
- * @mapping: IOMMU mapping
  * @stat_lock: Spinlock for handling statistics
  * @isp_mutex: Mutex for serializing requests to ISP.
  * @stop_failure: Indicates that an entity failed to stop.
@@ -184,8 +183,6 @@ struct isp_device {
 	struct regmap *syscon;
 	u32 syscon_offset;
 	u32 phy_type;
-
-	struct dma_iommu_mapping *mapping;
 
 	/* ISP Obj */
 	spinlock_t stat_lock;	/* common lock for statistic drivers */

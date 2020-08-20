@@ -56,10 +56,6 @@
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
 
-#ifdef CONFIG_ARM_DMA_USE_IOMMU
-#include <asm/dma-iommu.h>
-#endif
-
 #include <media/v4l2-common.h>
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-device.h>
@@ -1942,51 +1938,6 @@ error_csi2:
 	return ret;
 }
 
-static void isp_detach_iommu(struct isp_device *isp)
-{
-#ifdef CONFIG_ARM_DMA_USE_IOMMU
-	arm_iommu_detach_device(isp->dev);
-	arm_iommu_release_mapping(isp->mapping);
-	isp->mapping = NULL;
-#endif
-}
-
-static int isp_attach_iommu(struct isp_device *isp)
-{
-#ifdef CONFIG_ARM_DMA_USE_IOMMU
-	struct dma_iommu_mapping *mapping;
-	int ret;
-
-	/*
-	 * Create the ARM mapping, used by the ARM DMA mapping core to allocate
-	 * VAs. This will allocate a corresponding IOMMU domain.
-	 */
-	mapping = arm_iommu_create_mapping(&platform_bus_type, SZ_1G, SZ_2G);
-	if (IS_ERR(mapping)) {
-		dev_err(isp->dev, "failed to create ARM IOMMU mapping\n");
-		return PTR_ERR(mapping);
-	}
-
-	isp->mapping = mapping;
-
-	/* Attach the ARM VA mapping to the device. */
-	ret = arm_iommu_attach_device(isp->dev, mapping);
-	if (ret < 0) {
-		dev_err(isp->dev, "failed to attach device to VA mapping\n");
-		goto error;
-	}
-
-	return 0;
-
-error:
-	arm_iommu_release_mapping(isp->mapping);
-	isp->mapping = NULL;
-	return ret;
-#else
-	return -ENODEV;
-#endif
-}
-
 /*
  * isp_remove - Remove ISP platform device
  * @pdev: Pointer to ISP platform device
@@ -2001,10 +1952,6 @@ static int isp_remove(struct platform_device *pdev)
 	isp_unregister_entities(isp);
 	isp_cleanup_modules(isp);
 	isp_xclk_cleanup(isp);
-
-	__omap3isp_get(isp, false);
-	isp_detach_iommu(isp);
-	__omap3isp_put(isp, false);
 
 	media_entity_enum_cleanup(&isp->crashed);
 	v4l2_async_notifier_cleanup(&isp->notifier);
@@ -2385,18 +2332,11 @@ static int isp_probe(struct platform_device *pdev)
 	isp->mmio_hist_base_phys =
 		mem->start + isp_res_maps[m].offset[OMAP3_ISP_IOMEM_HIST];
 
-	/* IOMMU */
-	ret = isp_attach_iommu(isp);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "unable to attach to IOMMU\n");
-		goto error_isp;
-	}
-
 	/* Interrupt */
 	ret = platform_get_irq(pdev, 0);
 	if (ret <= 0) {
 		ret = -ENODEV;
-		goto error_iommu;
+		goto error_isp;
 	}
 	isp->irq_num = ret;
 
@@ -2404,13 +2344,13 @@ static int isp_probe(struct platform_device *pdev)
 			     "OMAP3 ISP", isp)) {
 		dev_err(isp->dev, "Unable to request IRQ\n");
 		ret = -EINVAL;
-		goto error_iommu;
+		goto error_isp;
 	}
 
 	/* Entities */
 	ret = isp_initialize_modules(isp);
 	if (ret < 0)
-		goto error_iommu;
+		goto error_isp;
 
 	ret = isp_register_entities(isp);
 	if (ret < 0)
@@ -2435,8 +2375,6 @@ error_register_entities:
 	isp_unregister_entities(isp);
 error_modules:
 	isp_cleanup_modules(isp);
-error_iommu:
-	isp_detach_iommu(isp);
 error_isp:
 	isp_xclk_cleanup(isp);
 	__omap3isp_put(isp, false);
