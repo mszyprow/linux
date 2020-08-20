@@ -13,14 +13,6 @@ struct dma_iommu_mapping {
 	/* iommu specific data */
 	struct iommu_domain	*domain;
 
-	unsigned long		**bitmaps;	/* array of bitmaps */
-	unsigned int		nr_bitmaps;	/* nr of elements in array */
-	unsigned int		extensions;
-	size_t			bitmap_size;	/* size of a single bitmap */
-	size_t			bits;		/* per bitmap */
-	dma_addr_t		base;
-
-	spinlock_t		lock;
 	struct kref		kref;
 };
 
