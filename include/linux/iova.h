@@ -152,6 +152,8 @@ void queue_iova(struct iova_domain *iovad,
 		unsigned long data);
 unsigned long alloc_iova_fast(struct iova_domain *iovad, unsigned long size,
 			      unsigned long limit_pfn, bool flush_rcache);
+unsigned long alloc_iova_first_fit(struct iova_domain *iovad, unsigned long size,
+				   unsigned long limit_pfn);
 struct iova *reserve_iova(struct iova_domain *iovad, unsigned long pfn_lo,
 	unsigned long pfn_hi);
 void copy_reserved_iova(struct iova_domain *from, struct iova_domain *to);
