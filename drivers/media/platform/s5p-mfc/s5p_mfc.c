@@ -1199,8 +1199,12 @@ static int s5p_mfc_configure_common_memory(struct s5p_mfc_dev *mfc_dev)
 	if (!mfc_dev->mem_bitmap)
 		return -ENOMEM;
 
-	mfc_dev->mem_virt = dma_alloc_coherent(dev, mem_size,
-					       &mfc_dev->mem_base, GFP_KERNEL);
+	/* MFC v5 can access memory only via the 256M window */
+	if (exynos_is_iommu_available(dev) && !IS_MFCV6_PLUS(mfc_dev))
+		dma_set_mask_and_coherent(dev, SZ_256M - 1);
+
+	mfc_dev->mem_virt = dma_alloc_attrs(dev, mem_size, &mfc_dev->mem_base,
+					    GFP_KERNEL, DMA_ATTR_LOW_ADDRESS);
 	if (!mfc_dev->mem_virt) {
 		kfree(mfc_dev->mem_bitmap);
 		dev_err(dev, "failed to preallocate %ld MiB for the firmware and context buffers\n",
