@@ -335,8 +335,9 @@ static int fimc_is_alloc_cpu_memory(struct fimc_is *is)
 {
 	struct device *dev = &is->pdev->dev;
 
-	is->memory.vaddr = dma_alloc_coherent(dev, FIMC_IS_CPU_MEM_SIZE,
-					      &is->memory.addr, GFP_KERNEL);
+	is->memory.vaddr = dma_alloc_attrs(dev, FIMC_IS_CPU_MEM_SIZE,
+					   &is->memory.addr, GFP_KERNEL,
+					   DMA_ATTR_LOW_ADDRESS);
 	if (is->memory.vaddr == NULL)
 		return -ENOMEM;
 
