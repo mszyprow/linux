@@ -407,6 +407,8 @@ EXPORT_SYMBOL_GPL(free_iova);
  * This function tries to satisfy an iova allocation from the rcache,
  * and falls back to regular allocation on failure. If regular allocation
  * fails too and the flush_rcache flag is set then the rcache will be flushed.
+ * Returns a pfn the allocated iova starts at or IOVA_BAD_ADDR in the case
+ * of a failure.
 */
 unsigned long
 alloc_iova_fast(struct iova_domain *iovad, unsigned long size,
@@ -416,7 +418,7 @@ alloc_iova_fast(struct iova_domain *iovad, unsigned long size,
 	struct iova *new_iova;
 
 	iova_pfn = iova_rcache_get(iovad, size, limit_pfn + 1);
-	if (iova_pfn)
+	if (iova_pfn != IOVA_BAD_ADDR)
 		return iova_pfn;
 
 retry:
@@ -425,7 +427,7 @@ retry:
 		unsigned int cpu;
 
 		if (!flush_rcache)
-			return 0;
+			return IOVA_BAD_ADDR;
 
 		/* Try replenishing IOVAs by flushing rcache. */
 		flush_rcache = false;
@@ -956,7 +958,7 @@ static unsigned long __iova_rcache_get(struct iova_rcache *rcache,
 				       unsigned long limit_pfn)
 {
 	struct iova_cpu_rcache *cpu_rcache;
-	unsigned long iova_pfn = 0;
+	unsigned long iova_pfn = IOVA_BAD_ADDR;
 	bool has_pfn = false;
 	unsigned long flags;
 
@@ -998,7 +1000,7 @@ static unsigned long iova_rcache_get(struct iova_domain *iovad,
 	unsigned int log_size = order_base_2(size);
 
 	if (log_size >= IOVA_RANGE_CACHE_MAX_SIZE)
-		return 0;
+		return IOVA_BAD_ADDR;
 
 	return __iova_rcache_get(&iovad->rcaches[log_size], limit_pfn - size);
 }

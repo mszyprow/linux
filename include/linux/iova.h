@@ -22,6 +22,8 @@ struct iova {
 	unsigned long	pfn_lo; /* Lowest allocated pfn */
 };
 
+#define IOVA_BAD_ADDR	(~0UL)
+
 struct iova_magazine;
 struct iova_cpu_rcache;
 

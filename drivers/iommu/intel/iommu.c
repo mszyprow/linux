@@ -3416,15 +3416,15 @@ static unsigned long intel_alloc_iova(struct device *dev,
 		 */
 		iova_pfn = alloc_iova_fast(&domain->iovad, nrpages,
 					   IOVA_PFN(DMA_BIT_MASK(32)), false);
-		if (iova_pfn)
+		if (iova_pfn != IOVA_BAD_ADDR)
 			return iova_pfn;
 	}
 	iova_pfn = alloc_iova_fast(&domain->iovad, nrpages,
 				   IOVA_PFN(dma_mask), true);
-	if (unlikely(!iova_pfn)) {
+	if (unlikely(iova_pfn == IOVA_BAD_ADDR)) {
 		dev_err_once(dev, "Allocating %ld-page iova failed\n",
 			     nrpages);
-		return 0;
+		return IOVA_BAD_ADDR;
 	}
 
 	return iova_pfn;
@@ -3454,7 +3454,7 @@ static dma_addr_t __intel_map_single(struct device *dev, phys_addr_t paddr,
 	size = aligned_nrpages(paddr, size);
 
 	iova_pfn = intel_alloc_iova(dev, domain, dma_to_mm_pfn(size), dma_mask);
-	if (!iova_pfn)
+	if (iova_pfn == IOVA_BAD_ADDR)
 		goto error;
 
 	/*
@@ -3663,7 +3663,7 @@ static int intel_map_sg(struct device *dev, struct scatterlist *sglist, int nele
 
 	iova_pfn = intel_alloc_iova(dev, domain, dma_to_mm_pfn(size),
 				*dev->dma_mask);
-	if (!iova_pfn) {
+	if (iova_pfn == IOVA_BAD_ADDR) {
 		sglist->dma_length = 0;
 		return 0;
 	}
@@ -3760,7 +3760,7 @@ bounce_map_single(struct device *dev, phys_addr_t paddr, size_t size,
 	nrpages = aligned_nrpages(0, size);
 	iova_pfn = intel_alloc_iova(dev, domain,
 				    dma_to_mm_pfn(nrpages), dma_mask);
-	if (!iova_pfn)
+	if (iova_pfn == IOVA_BAD_ADDR)
 		return DMA_MAPPING_ERROR;
 
 	/*

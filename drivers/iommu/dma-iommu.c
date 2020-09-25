@@ -405,7 +405,7 @@ static dma_addr_t iommu_dma_alloc_iova(struct iommu_domain *domain,
 {
 	struct iommu_dma_cookie *cookie = domain->iova_cookie;
 	struct iova_domain *iovad = &cookie->iovad;
-	unsigned long shift, iova_len, iova = 0;
+	unsigned long shift, iova_len, iova = IOVA_BAD_ADDR;
 
 	if (cookie->type == IOMMU_DMA_MSI_COOKIE) {
 		cookie->msi_iova += size;
@@ -433,11 +433,13 @@ static dma_addr_t iommu_dma_alloc_iova(struct iommu_domain *domain,
 		iova = alloc_iova_fast(iovad, iova_len,
 				       DMA_BIT_MASK(32) >> shift, false);
 
-	if (!iova)
+	if (iova == IOVA_BAD_ADDR)
 		iova = alloc_iova_fast(iovad, iova_len, dma_limit >> shift,
 				       true);
 
-	return (dma_addr_t)iova << shift;
+	if (iova != IOVA_BAD_ADDR)
+		return (dma_addr_t)iova << shift;
+	return DMA_MAPPING_ERROR;
 }
 
 static void iommu_dma_free_iova(struct iommu_dma_cookie *cookie,
@@ -493,8 +495,8 @@ static dma_addr_t __iommu_dma_map(struct device *dev, phys_addr_t phys,
 	size = iova_align(iovad, size + iova_off);
 
 	iova = iommu_dma_alloc_iova(domain, size, dma_mask, dev);
-	if (!iova)
-		return DMA_MAPPING_ERROR;
+	if (iova == DMA_MAPPING_ERROR)
+		return iova;
 
 	if (iommu_map_atomic(domain, iova, phys - iova_off, size, prot)) {
 		iommu_dma_free_iova(cookie, iova, size);
@@ -617,7 +619,7 @@ static void *iommu_dma_alloc_remap(struct device *dev, size_t size,
 
 	size = iova_align(iovad, size);
 	iova = iommu_dma_alloc_iova(domain, size, dev->coherent_dma_mask, dev);
-	if (!iova)
+	if (iova == DMA_MAPPING_ERROR)
 		goto out_free_pages;
 
 	if (sg_alloc_table_from_pages(&sgt, pages, count, 0, size, GFP_KERNEL))
@@ -887,7 +889,7 @@ static int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg,
 	}
 
 	iova = iommu_dma_alloc_iova(domain, iova_len, dma_get_mask(dev), dev);
-	if (!iova)
+	if (iova == DMA_MAPPING_ERROR)
 		goto out_restore_sg;
 
 	/*
@@ -1181,7 +1183,7 @@ static struct iommu_dma_msi_page *iommu_dma_get_msi_page(struct device *dev,
 		return NULL;
 
 	iova = iommu_dma_alloc_iova(domain, size, dma_get_mask(dev), dev);
-	if (!iova)
+	if (iova == DMA_MAPPING_ERROR)
 		goto out_free_page;
 
 	if (iommu_map(domain, iova, msi_addr, size, prot))
