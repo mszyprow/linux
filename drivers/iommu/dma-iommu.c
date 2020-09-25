@@ -401,6 +401,18 @@ static int dma_info_to_prot(enum dma_data_direction dir, bool coherent,
 }
 
 #define DMA_ALLOC_IOVA_COHERENT		BIT(0)
+#define DMA_ALLOC_IOVA_FIRST_FIT	BIT(1)
+
+static unsigned int dma_attrs_to_alloc_flags(unsigned long attrs, bool coherent)
+{
+	unsigned int flags = 0;
+
+	if (coherent)
+		flags |= DMA_ALLOC_IOVA_COHERENT;
+	if (attrs & DMA_ATTR_LOW_ADDRESS)
+		flags |= DMA_ALLOC_IOVA_FIRST_FIT;
+	return flags;
+}
 
 static dma_addr_t iommu_dma_alloc_iova(struct iommu_domain *domain,
 		struct device *dev, size_t size, unsigned int flags)
@@ -433,13 +445,23 @@ static dma_addr_t iommu_dma_alloc_iova(struct iommu_domain *domain,
 		dma_limit = min(dma_limit, (u64)domain->geometry.aperture_end);
 
 	/* Try to get PCI devices a SAC address */
-	if (dma_limit > DMA_BIT_MASK(32) && dev_is_pci(dev))
-		iova = alloc_iova_fast(iovad, iova_len,
-				       DMA_BIT_MASK(32) >> shift, false);
+	if (dma_limit > DMA_BIT_MASK(32) && dev_is_pci(dev)) {
+		if (unlikely(flags & DMA_ALLOC_IOVA_FIRST_FIT))
+			iova = alloc_iova_first_fit(iovad, iova_len,
+						    DMA_BIT_MASK(32) >> shift);
+		else
+			iova = alloc_iova_fast(iovad, iova_len,
+					      DMA_BIT_MASK(32) >> shift, false);
+	}
 
-	if (iova == IOVA_BAD_ADDR)
-		iova = alloc_iova_fast(iovad, iova_len, dma_limit >> shift,
-				       true);
+	if (iova == IOVA_BAD_ADDR) {
+		if (unlikely(flags & DMA_ALLOC_IOVA_FIRST_FIT))
+			iova = alloc_iova_first_fit(iovad, iova_len,
+						    dma_limit >> shift);
+		else
+			iova = alloc_iova_fast(iovad, iova_len,
+					       dma_limit >> shift, true);
+	}
 
 	if (iova != IOVA_BAD_ADDR)
 		return (dma_addr_t)iova << shift;
@@ -593,6 +615,7 @@ static void *iommu_dma_alloc_remap(struct device *dev, size_t size,
 	struct iova_domain *iovad = &cookie->iovad;
 	bool coherent = dev_is_dma_coherent(dev);
 	int ioprot = dma_info_to_prot(DMA_BIDIRECTIONAL, coherent, attrs);
+	unsigned int flags = dma_attrs_to_alloc_flags(attrs, true);
 	pgprot_t prot = dma_pgprot(dev, PAGE_KERNEL, attrs);
 	unsigned int count, min_size, alloc_sizes = domain->pgsize_bitmap;
 	struct page **pages;
@@ -622,7 +645,7 @@ static void *iommu_dma_alloc_remap(struct device *dev, size_t size,
 		return NULL;
 
 	size = iova_align(iovad, size);
-	iova = iommu_dma_alloc_iova(domain, dev, size, DMA_ALLOC_IOVA_COHERENT);
+	iova = iommu_dma_alloc_iova(domain, dev, size, flags);
 	if (iova == DMA_MAPPING_ERROR)
 		goto out_free_pages;
 
@@ -732,12 +755,13 @@ static dma_addr_t iommu_dma_map_page(struct device *dev, struct page *page,
 		unsigned long offset, size_t size, enum dma_data_direction dir,
 		unsigned long attrs)
 {
+	unsigned int flags = dma_attrs_to_alloc_flags(attrs, false);
 	phys_addr_t phys = page_to_phys(page) + offset;
 	bool coherent = dev_is_dma_coherent(dev);
 	int prot = dma_info_to_prot(dir, coherent, attrs);
 	dma_addr_t dma_handle;
 
-	dma_handle = __iommu_dma_map(dev, phys, size, prot, 0);
+	dma_handle = __iommu_dma_map(dev, phys, size, prot, flags);
 	if (!coherent && !(attrs & DMA_ATTR_SKIP_CPU_SYNC) &&
 	    dma_handle != DMA_MAPPING_ERROR)
 		arch_sync_dma_for_device(phys, size, dir);
@@ -842,6 +866,7 @@ static int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg,
 	struct iova_domain *iovad = &cookie->iovad;
 	struct scatterlist *s, *prev = NULL;
 	int prot = dma_info_to_prot(dir, dev_is_dma_coherent(dev), attrs);
+	unsigned int flags = dma_attrs_to_alloc_flags(attrs, false);
 	dma_addr_t iova;
 	size_t iova_len = 0;
 	unsigned long mask = dma_get_seg_boundary(dev);
@@ -892,7 +917,7 @@ static int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg,
 		prev = s;
 	}
 
-	iova = iommu_dma_alloc_iova(domain, dev, iova_len, 0);
+	iova = iommu_dma_alloc_iova(domain, dev, iova_len, flags);
 	if (iova == DMA_MAPPING_ERROR)
 		goto out_restore_sg;
 
@@ -940,7 +965,8 @@ static dma_addr_t iommu_dma_map_resource(struct device *dev, phys_addr_t phys,
 		size_t size, enum dma_data_direction dir, unsigned long attrs)
 {
 	return __iommu_dma_map(dev, phys, size,
-			dma_info_to_prot(dir, false, attrs) | IOMMU_MMIO, 0);
+		       dma_info_to_prot(dir, false, attrs) | IOMMU_MMIO,
+		       dma_attrs_to_alloc_flags(attrs, false));
 }
 
 static void iommu_dma_unmap_resource(struct device *dev, dma_addr_t handle,
@@ -1027,6 +1053,7 @@ out_free_pages:
 static void *iommu_dma_alloc(struct device *dev, size_t size,
 		dma_addr_t *handle, gfp_t gfp, unsigned long attrs)
 {
+	unsigned int flags = dma_attrs_to_alloc_flags(attrs, true);
 	bool coherent = dev_is_dma_coherent(dev);
 	int ioprot = dma_info_to_prot(DMA_BIDIRECTIONAL, coherent, attrs);
 	struct page *page = NULL;
@@ -1047,8 +1074,7 @@ static void *iommu_dma_alloc(struct device *dev, size_t size,
 	if (!cpu_addr)
 		return NULL;
 
-	*handle = __iommu_dma_map(dev, page_to_phys(page), size, ioprot,
-				  DMA_ALLOC_IOVA_COHERENT);
+	*handle = __iommu_dma_map(dev, page_to_phys(page), size, ioprot, flags);
 	if (*handle == DMA_MAPPING_ERROR) {
 		__iommu_dma_free(dev, size, cpu_addr);
 		return NULL;
