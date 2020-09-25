@@ -66,6 +66,12 @@
  * at least read-only at lesser-privileged levels).
  */
 #define DMA_ATTR_PRIVILEGED		(1UL << 9)
+/*
+ * DMA_ATTR_LOW_ADDRESS: used to indicate that the buffer should be allocated
+ * at the lowest possible DMA address, usually just at the beginning of the
+ * DMA/IOVA address space ('first-fit' allocation algorithm).
+ */
+#define DMA_ATTR_LOW_ADDRESS		(1UL << 10)
 
 /*
  * A dma_addr_t can hold any valid DMA or bus address for the platform.
