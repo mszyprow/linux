@@ -266,6 +266,20 @@ static void __dma_clear_buffer(struct page *page, size_t size, int coherent_flag
 	}
 }
 
+void arch_dma_prep_coherent(struct page *page, size_t size)
+{
+
+	if (PageHighMem(page)) {
+		phys_addr_t base = __pfn_to_phys(page_to_pfn(page));
+		phys_addr_t end = base + size;
+		outer_flush_range(base, end);
+	} else {
+		void *ptr = page_address(page);
+		dmac_flush_range(ptr, ptr + size);
+		outer_flush_range(__pa(ptr), __pa(ptr) + size);
+	}
+}
+
 /*
  * Allocate a DMA buffer for 'dev' of size 'size' using the
  * specified gfp mask.  Note that 'size' must be page aligned.
