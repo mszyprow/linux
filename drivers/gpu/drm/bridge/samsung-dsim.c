@@ -1570,10 +1570,13 @@ static void samsung_dsim_unregister_host(struct samsung_dsim *dsi)
 {
 	mipi_dsi_host_unregister(&dsi->dsi_host);
 }
-
 static const struct samsung_dsim_host_ops samsung_dsim_generic_host_ops = {
 	.register_host = samsung_dsim_register_host,
 	.unregister_host = samsung_dsim_unregister_host,
+};
+
+static const struct drm_bridge_timings samsung_dsim_bridge_timings = {
+	.input_bus_flags = DRM_BUS_FLAG_DE_LOW,
 };
 
 int samsung_dsim_probe(struct platform_device *pdev)
@@ -1656,6 +1659,7 @@ int samsung_dsim_probe(struct platform_device *pdev)
 
 	dsi->bridge.funcs = &samsung_dsim_bridge_funcs;
 	dsi->bridge.of_node = dev->of_node;
+	dsi->bridge.timings = &samsung_dsim_bridge_timings;
 	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
 
 	if (dsi->plat_data->host_ops && dsi->plat_data->host_ops->register_host)
