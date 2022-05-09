@@ -108,7 +108,10 @@ static int exynos_dsi_host_attach(struct samsung_dsim *priv, struct mipi_dsi_dev
 	struct drm_device *drm = encoder->dev;
 	int ret;
 
-	drm_bridge_attach(encoder, &priv->bridge, NULL, 0);
+	drm_bridge_attach(encoder, &priv->bridge,
+			  list_first_entry_or_null(&encoder->bridge_chain,
+						   struct drm_bridge,
+						   chain_node), 0);
 
 	/*
 	 * This is a temporary solution and should be made by more generic way.
