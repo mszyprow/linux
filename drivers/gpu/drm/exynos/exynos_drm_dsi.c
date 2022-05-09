@@ -72,8 +72,10 @@ static int exynos_dsi_register_te_irq(struct exynos_dsi *dsi, struct device *pan
 	int te_gpio_irq;
 	int ret;
 
-	dsi->te_gpio = devm_gpiod_get_optional(priv->dev, "te", GPIOD_IN);
-	if (IS_ERR(dsi->te_gpio)) {
+	dsi->te_gpio = devm_gpiod_get_optional(panel, "te", GPIOD_IN);
+	if (!dsi->te_gpio) {
+		return 0;
+	} else if (IS_ERR(dsi->te_gpio)) {
 		dev_err(priv->dev, "gpio request failed with %ld\n",
 				PTR_ERR(dsi->te_gpio));
 		return PTR_ERR(dsi->te_gpio);
