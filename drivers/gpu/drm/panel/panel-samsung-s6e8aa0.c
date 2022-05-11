@@ -905,9 +905,14 @@ static int s6e8aa0_prepare(struct drm_panel *panel)
 	if (ret < 0)
 		return ret;
 
+	ret = mipi_dsi_host_init(to_mipi_dsi_device(ctx->dev));
+	if (ret < 0)
+		goto err;
+
 	s6e8aa0_set_sequence(ctx);
 	ret = ctx->error;
 
+err:
 	if (ret < 0)
 		s6e8aa0_unprepare(panel);
 
