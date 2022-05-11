@@ -1223,6 +1223,25 @@ int mipi_dsi_dcs_get_display_brightness(struct mipi_dsi_device *dsi,
 }
 EXPORT_SYMBOL(mipi_dsi_dcs_get_display_brightness);
 
+/**
+ * mipi_dsi_host_init() - initialize MIPI DSI host
+ * @dsi: DSI peripheral device
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_host_init(struct mipi_dsi_device *dsi)
+{
+	const struct mipi_dsi_host_ops *ops = dsi->host->ops;
+
+	if (!ops)
+		return -ENOSYS;
+	if (!ops->init)
+		return 0;
+
+	return ops->init(dsi->host);
+}
+EXPORT_SYMBOL(mipi_dsi_host_init);
+
 static int mipi_dsi_drv_probe(struct device *dev)
 {
 	struct mipi_dsi_driver *drv = to_mipi_dsi_driver(dev->driver);

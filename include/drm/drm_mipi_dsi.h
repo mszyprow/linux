@@ -91,6 +91,7 @@ struct mipi_dsi_host_ops {
 		      struct mipi_dsi_device *dsi);
 	int (*detach)(struct mipi_dsi_host *host,
 		      struct mipi_dsi_device *dsi);
+	int (*init)(struct mipi_dsi_host *host);
 	ssize_t (*transfer)(struct mipi_dsi_host *host,
 			    const struct mipi_dsi_msg *msg);
 };
@@ -248,6 +249,7 @@ ssize_t mipi_dsi_generic_write(struct mipi_dsi_device *dsi, const void *payload,
 			       size_t size);
 ssize_t mipi_dsi_generic_read(struct mipi_dsi_device *dsi, const void *params,
 			      size_t num_params, void *data, size_t size);
+int mipi_dsi_host_init(struct mipi_dsi_device *dsi);
 
 /**
  * enum mipi_dsi_dcs_tear_mode - Tearing Effect Output Line mode
