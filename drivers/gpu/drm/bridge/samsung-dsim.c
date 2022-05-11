@@ -1598,10 +1598,9 @@ static int samsung_dsim_parse_dt(struct samsung_dsim *dsi)
 	return 0;
 }
 
-__weak const struct samsung_dsim_plat_data *
-samsung_dsim_plat_probe(struct samsung_dsim *priv)
+__weak int samsung_dsim_plat_probe(struct samsung_dsim *priv)
 {
-	return NULL;
+	return 0;
 }
 
 __weak void samsung_dsim_plat_remove(struct samsung_dsim *priv)
@@ -1694,12 +1693,10 @@ static int samsung_dsim_probe(struct platform_device *pdev)
 	dsi->bridge.timings = &samsung_dsim_bridge_timings;
 	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
 
-	if (dsi->driver_data->platform_init) {
-		dsi->plat_data = samsung_dsim_plat_probe(dsi);
-		ret = IS_ERR(dsi->plat_data) ? PTR_ERR(dsi->plat_data) : 0;
-	} else {
+	if (dsi->driver_data->platform_init)
+		ret = samsung_dsim_plat_probe(dsi);
+	else
 		ret = mipi_dsi_host_register(&dsi->dsi_host);
-	}
 
 	if (ret)
 		goto err_disable_runtime;

@@ -194,24 +194,26 @@ static const struct component_ops exynos_dsi_component_ops = {
 	.unbind	= exynos_dsi_unbind,
 };
 
-const struct samsung_dsim_plat_data *samsung_dsim_plat_probe(struct samsung_dsim *priv)
+int samsung_dsim_plat_probe(struct samsung_dsim *priv)
 {
 	struct exynos_dsi *dsi;
 	int ret;
 
 	dsi = devm_kzalloc(priv->dev, sizeof(*dsi), GFP_KERNEL);
 	if (!dsi)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
 	dsi->pdata.host_ops = &samsung_dsim_exynos_host_ops;
 	dsi->pdata.irq_ops = &samsung_dsim_exynos_host_irq;
 	dsi->priv = priv;
 
+	priv->plat_data = &dsi->pdata;
+
 	ret = component_add(priv->dev, &exynos_dsi_component_ops);
 	if (ret)
-		return ERR_PTR(ret);
+		return ret;
 
-	return &dsi->pdata;
+	return 0;
 }
 
 void samsung_dsim_plat_remove(struct samsung_dsim *priv)

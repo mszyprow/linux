@@ -93,7 +93,7 @@ struct samsung_dsim {
 	const struct samsung_dsim_plat_data *plat_data;
 };
 
-const struct samsung_dsim_plat_data *samsung_dsim_plat_probe(struct samsung_dsim *priv);
+int samsung_dsim_plat_probe(struct samsung_dsim *priv);
 void samsung_dsim_plat_remove(struct samsung_dsim *priv);
 
 #endif /* __SAMSUNG_DSIM__ */
