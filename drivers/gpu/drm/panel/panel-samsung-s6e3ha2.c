@@ -550,6 +550,10 @@ static int s6e3ha2_prepare(struct drm_panel *panel)
 	if (ret < 0)
 		return ret;
 
+	ret = mipi_dsi_host_init(to_mipi_dsi_device(ctx->dev));
+	if (ret < 0)
+		goto err;
+
 	ret = s6e3ha2_panel_init(ctx);
 	if (ret < 0)
 		goto err;
