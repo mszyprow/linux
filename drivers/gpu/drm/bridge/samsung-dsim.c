@@ -1335,10 +1335,6 @@ static void samsung_dsim_atomic_pre_enable(struct drm_bridge *bridge,
 	}
 
 	dsi->state |= DSIM_STATE_ENABLED;
-
-	ret = samsung_dsim_init(dsi);
-	if (ret)
-		return;
 }
 
 static void samsung_dsim_atomic_enable(struct drm_bridge *bridge,
@@ -1531,6 +1527,16 @@ static int samsung_dsim_host_detach(struct mipi_dsi_host *host,
 	return 0;
 }
 
+static int samsung_dsim_host_init(struct mipi_dsi_host *host)
+{
+	struct samsung_dsim *dsi = host_to_dsi(host);
+
+	if (!(dsi->state & DSIM_STATE_ENABLED))
+		return -EINVAL;
+
+	return samsung_dsim_init(dsi);
+}
+
 static ssize_t samsung_dsim_host_transfer(struct mipi_dsi_host *host,
 					  const struct mipi_dsi_msg *msg)
 {
@@ -1560,6 +1566,7 @@ static ssize_t samsung_dsim_host_transfer(struct mipi_dsi_host *host,
 static const struct mipi_dsi_host_ops samsung_dsim_ops = {
 	.attach = samsung_dsim_host_attach,
 	.detach = samsung_dsim_host_detach,
+	.init = samsung_dsim_host_init,
 	.transfer = samsung_dsim_host_transfer,
 };
 
