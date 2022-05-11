@@ -284,13 +284,27 @@ static void tc358764_pre_enable(struct drm_bridge *bridge)
 	int ret;
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(ctx->dev, "error enabling regulators (%d)\n", ret);
+		return;
+	}
 	usleep_range(10000, 15000);
 	tc358764_reset(ctx);
+
+	ret = mipi_dsi_host_init(to_mipi_dsi_device(ctx->dev));
+	if (ret < 0) {
+		dev_err(ctx->dev, "error initializing mipi host (%d)\n", ret);
+		goto err;
+	}
+
 	ret = tc358764_init(ctx);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(ctx->dev, "error initializing bridge (%d)\n", ret);
+		goto err;
+	}
+	return;
+err:
+	tc358764_post_disable(bridge);
 }
 
 static int tc358764_attach(struct drm_bridge *bridge,
