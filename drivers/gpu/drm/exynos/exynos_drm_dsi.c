@@ -1713,6 +1713,7 @@ static int exynos_dsi_probe(struct platform_device *pdev)
 	dsi->bridge.funcs = &exynos_dsi_bridge_funcs;
 	dsi->bridge.of_node = dev->of_node;
 	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
+	dsi->bridge.pre_enable_prev_first = true;
 
 	ret = component_add(dev, &exynos_dsi_component_ops);
 	if (ret)
