@@ -30,6 +30,9 @@ enum samsung_dsim_type {
 	SAMSUNG_DSIM_TYPE_COUNT,
 };
 
+#define samsung_dsim_hw_is_exynos(hw) ((hw) >= SAMSUNG_DSIM_TYPE_EXYNOS3250 && \
+	(hw) <= SAMSUNG_DSIM_TYPE_EXYNOS5433)
+
 struct samsung_dsim_transfer {
 	struct list_head list;
 	struct completion completed;

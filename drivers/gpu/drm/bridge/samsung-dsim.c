@@ -1291,9 +1291,11 @@ static void samsung_dsim_atomic_pre_enable(struct drm_bridge *bridge,
 
 	dsi->state |= DSIM_STATE_ENABLED;
 
-	ret = samsung_dsim_init(dsi, DSIM_STATE_INITIALIZED);
-	if (ret)
-		return;
+	if (!samsung_dsim_hw_is_exynos(dsi->plat_data->hw_type)) {
+		ret = samsung_dsim_init(dsi, DSIM_STATE_INITIALIZED);
+		if (ret)
+			return;
+	}
 }
 
 static void samsung_dsim_atomic_enable(struct drm_bridge *bridge,
